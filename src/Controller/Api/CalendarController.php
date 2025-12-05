@@ -16,7 +16,7 @@ class CalendarController extends BaseApiController
     ) {}
 
     /**
-     * Récupérer les événements du calendrier (courses planifiées)
+     * Récupérer les événements du calendrier (courses acceptées à effectuer)
      */
     #[Route('/events', name: 'api_calendar_events', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
@@ -28,11 +28,14 @@ class CalendarController extends BaseApiController
         $startDate = $request->query->get('start');
         $endDate = $request->query->get('end');
         
-        // Récupérer les courses du chauffeur
-        $myRides = $this->rideRepository->findBy(['chauffeur' => $user]);
+        // Récupérer uniquement les courses ACCEPTÉES par ce chauffeur (pas les courses disponibles)
         $acceptedRides = $this->rideRepository->findBy(['chauffeurAccepteur' => $user]);
         
-        $allRides = array_merge($myRides, $acceptedRides);
+        // Filtrer pour garder seulement les courses acceptées, en cours ou terminées
+        // Statuts utilisés : 'disponible', 'acceptée', 'en_cours', 'terminée', 'annulée'
+        $allRides = array_filter($acceptedRides, function($ride) {
+            return in_array($ride->getStatus(), ['acceptée', 'en_cours', 'terminée']);
+        });
         
         // Filtrer par date si spécifié
         if ($startDate && $endDate) {
@@ -51,11 +54,11 @@ class CalendarController extends BaseApiController
             
             // Couleur selon le statut
             $color = match($ride->getStatus()) {
-                'pending' => 'orange',
-                'accepted' => 'blue',
-                'in_progress' => 'indigo',
-                'completed' => 'green',
-                'cancelled' => 'red',
+                'disponible' => 'orange',
+                'acceptée' => 'blue',
+                'en_cours' => 'indigo',
+                'terminée' => 'green',
+                'annulée' => 'red',
                 default => 'gray'
             };
             
@@ -79,6 +82,7 @@ class CalendarController extends BaseApiController
                 'end' => $endDateTime?->format('c'),
                 'color' => $color,
                 'extendedProps' => [
+                    'eventColor' => $color,
                     'rideId' => $ride->getId(),
                     'clientName' => $ride->getClientName(),
                     'clientContact' => $ride->getClientContact(),
@@ -112,7 +116,7 @@ class CalendarController extends BaseApiController
     }
 
     /**
-     * Statistiques du planning
+     * Statistiques du planning (courses acceptées uniquement)
      */
     #[Route('/stats', name: 'api_calendar_stats', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
@@ -126,9 +130,13 @@ class CalendarController extends BaseApiController
         $monthStart = new \DateTime('first day of this month');
         $monthEnd = new \DateTime('last day of this month');
         
-        $myRides = $this->rideRepository->findBy(['chauffeur' => $user]);
+        // Uniquement les courses acceptées par ce chauffeur
         $acceptedRides = $this->rideRepository->findBy(['chauffeurAccepteur' => $user]);
-        $allRides = array_merge($myRides, $acceptedRides);
+        
+        // Filtrer pour garder les courses actives (acceptée, en_cours, terminée)
+        $allRides = array_filter($acceptedRides, function($ride) {
+            return in_array($ride->getStatus(), ['acceptée', 'en_cours', 'terminée']);
+        });
         
         // Courses aujourd'hui
         $todayRides = array_filter($allRides, function($ride) use ($today) {
@@ -147,14 +155,14 @@ class CalendarController extends BaseApiController
             return $date && $date >= $monthStart && $date <= $monthEnd;
         });
         
-        // Courses en attente
-        $pendingRides = array_filter($allRides, fn($r) => $r->getStatus() === 'pending');
+        // Courses à faire (acceptées mais pas encore terminées)
+        $upcomingRides = array_filter($allRides, fn($r) => in_array($r->getStatus(), ['acceptée', 'en_cours']));
         
         return new JsonResponse([
             'today' => count($todayRides),
             'thisWeek' => count($weekRides),
             'thisMonth' => count($monthRides),
-            'pending' => count($pendingRides),
+            'pending' => count($upcomingRides),
             'upcomingRides' => array_map(function($ride) {
                 return [
                     'id' => $ride->getId(),
@@ -163,7 +171,7 @@ class CalendarController extends BaseApiController
                     'time' => $ride->getTime()?->format('H:i'),
                     'status' => $ride->getStatus(),
                 ];
-            }, array_slice(array_filter($todayRides, fn($r) => $r->getStatus() !== 'completed'), 0, 5)),
+            }, array_slice(array_values($upcomingRides), 0, 5)),
         ]);
     }
 }

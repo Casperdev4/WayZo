@@ -103,9 +103,7 @@ class RideController extends AbstractController
         // Construire la requête
         $qb = $this->rideRepository->createQueryBuilder('r')
             ->where('r.status = :status')
-            ->andWhere('r.chauffeur != :user') // Exclure ses propres courses
-            ->setParameter('status', 'disponible')
-            ->setParameter('user', $user);
+            ->setParameter('status', 'disponible');
         
         // Courses publiques OU courses de ses groupes
         if (!empty($groupeIds)) {
@@ -123,8 +121,8 @@ class RideController extends AbstractController
         
         $rides = $qb->getQuery()->getResult();
         
-        $data = array_map(function (Ride $ride) {
-            return $this->serializeRide($ride);
+        $data = array_map(function (Ride $ride) use ($user) {
+            return $this->serializeRide($ride, $user);
         }, $rides);
 
         return new JsonResponse($data);
@@ -180,7 +178,8 @@ class RideController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function show(Ride $ride): JsonResponse
     {
-        return new JsonResponse($this->serializeRide($ride));
+        $user = $this->getUser();
+        return new JsonResponse($this->serializeRide($ride, $user));
     }
 
     /**
@@ -400,10 +399,57 @@ class RideController extends AbstractController
     }
 
     /**
+     * Mettre à jour le statut d'une course
+     */
+    #[Route('/{id}/status', name: 'api_rides_update_status', methods: ['PUT'])]
+    #[IsGranted('ROLE_USER')]
+    public function updateStatus(Ride $ride, Request $request): JsonResponse
+    {
+        try {
+            $user = $this->getUser();
+            $data = json_decode($request->getContent(), true);
+            $newStatus = $data['status'] ?? null;
+            
+            // Vérifier que l'utilisateur est le chauffeur accepteur
+            if ($ride->getChauffeurAccepteur() !== $user) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'Vous n\'êtes pas autorisé à modifier cette course'
+                ], 403);
+            }
+            
+            // Valider le statut
+            $validStatuses = ['acceptée', 'en_cours', 'terminée', 'annulée'];
+            if (!in_array($newStatus, $validStatuses)) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'Statut invalide'
+                ], 400);
+            }
+            
+            $ride->setStatus($newStatus);
+            $this->entityManager->flush();
+            
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Statut mis à jour',
+                'ride' => $this->serializeRide($ride, $user)
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Erreur: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
      * Sérialiser une course en tableau
      */
-    private function serializeRide(Ride $ride): array
+    private function serializeRide(Ride $ride, $currentUser = null): array
     {
+        $isOwner = $currentUser && $ride->getChauffeur() && $ride->getChauffeur()->getId() === $currentUser->getId();
+        
         return [
             'id' => $ride->getId(),
             'clientName' => $ride->getClientName(),
@@ -422,6 +468,7 @@ class RideController extends AbstractController
             'status' => $ride->getStatus(),
             'statusVendeur' => $ride->getStatusVendeur(),
             'visibility' => $ride->getVisibility(),
+            'isOwner' => $isOwner,
             'groupe' => $ride->getGroupe() ? [
                 'id' => $ride->getGroupe()->getId(),
                 'nom' => $ride->getGroupe()->getNom(),
