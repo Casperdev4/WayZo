@@ -10,6 +10,8 @@ use App\Repository\ChauffeurRepository;
 use App\Repository\CourseRepository;
 use App\Repository\RideRepository;
 use App\Repository\ConversationRepository;
+use App\Service\MercureService;
+use App\Service\PushNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -25,7 +27,9 @@ class ChatController extends BaseApiController
         private CourseRepository $courseRepository,
         private RideRepository $rideRepository,
         private ConversationRepository $conversationRepository,
-        private EntityManagerInterface $em
+        private EntityManagerInterface $em,
+        private MercureService $mercureService,
+        private PushNotificationService $pushNotificationService
     ) {}
 
     /**
@@ -298,6 +302,31 @@ class ChatController extends BaseApiController
                 $notification->setMessage($user->getPrenom() . ' vous a envoyé un message');
                 $notification->setRide($conversation->getRide());
                 $this->em->persist($notification);
+
+                // 🔥 Publier en temps réel via Mercure
+                $this->mercureService->publishChatMessage(
+                    $conversation->getId(),
+                    [
+                        'id' => 'msg-' . $message->getId(),
+                        'sender' => [
+                            'id' => $user->getId(),
+                            'name' => $user->getPrenom() . ' ' . $user->getNom(),
+                            'avatarImageUrl' => '/img/avatars/thumb-' . ($user->getId() % 15 + 1) . '.jpg',
+                        ],
+                        'content' => $message->getContenu(),
+                        'timestamp' => $message->getDateEnvoi()->getTimestamp(),
+                        'type' => 'regular',
+                    ],
+                    [$user->getId(), $other->getId()]
+                );
+
+                // 📱 Envoyer une push notification
+                $this->pushNotificationService->notifyNewMessage(
+                    $other,
+                    $user,
+                    $message->getContenu(),
+                    $conversation->getId()
+                );
             }
             
             $this->em->flush();

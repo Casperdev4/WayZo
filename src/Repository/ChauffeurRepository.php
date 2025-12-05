@@ -16,28 +16,53 @@ class ChauffeurRepository extends ServiceEntityRepository
         parent::__construct($registry, Chauffeur::class);
     }
 
-//    /**
-//     * @return Chauffeur[] Returns an array of Chauffeur objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('c.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
+    /**
+     * Récupérer tous les tokens FCM valides
+     * @return string[]
+     */
+    public function getAllFcmTokens(): array
+    {
+        $result = $this->createQueryBuilder('c')
+            ->select('c.fcmToken')
+            ->where('c.fcmToken IS NOT NULL')
+            ->andWhere('c.status = :status')
+            ->setParameter('status', Chauffeur::STATUS_ACTIVE)
+            ->getQuery()
+            ->getResult();
 
-//    public function findOneBySomeField($value): ?Chauffeur
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
+        return array_column($result, 'fcmToken');
+    }
+
+    /**
+     * Récupérer les chauffeurs avec tokens FCM
+     * @return Chauffeur[]
+     */
+    public function findWithFcmTokens(): array
+    {
+        return $this->createQueryBuilder('c')
+            ->where('c.fcmToken IS NOT NULL')
+            ->andWhere('c.status = :status')
+            ->setParameter('status', Chauffeur::STATUS_ACTIVE)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Récupérer les tokens FCM par plateforme
+     * @return string[]
+     */
+    public function getFcmTokensByPlatform(string $platform): array
+    {
+        $result = $this->createQueryBuilder('c')
+            ->select('c.fcmToken')
+            ->where('c.fcmToken IS NOT NULL')
+            ->andWhere('c.fcmPlatform = :platform')
+            ->andWhere('c.status = :status')
+            ->setParameter('platform', $platform)
+            ->setParameter('status', Chauffeur::STATUS_ACTIVE)
+            ->getQuery()
+            ->getResult();
+
+        return array_column($result, 'fcmToken');
+    }
 }

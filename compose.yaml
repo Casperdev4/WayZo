@@ -19,7 +19,36 @@ services:
       # - ./docker/db/data:/var/lib/postgresql/data:rw
 ###< doctrine/doctrine-bundle ###
 
+###> symfony/mercure-bundle ###
+  mercure:
+    image: dunglas/mercure
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      SERVER_NAME: ':80'
+      MERCURE_PUBLISHER_JWT_KEY: 'WayZoMercureSecretKey2025!SuperSecure32chars'
+      MERCURE_SUBSCRIBER_JWT_KEY: 'WayZoMercureSecretKey2025!SuperSecure32chars'
+      MERCURE_EXTRA_DIRECTIVES: |
+        cors_origins http://127.0.0.1:8000 http://localhost:5173 http://localhost:3001
+        anonymous
+    command: /usr/bin/caddy run --config /etc/caddy/dev.Caddyfile
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthz"]
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - mercure_data:/data
+      - mercure_config:/config
+###< symfony/mercure-bundle ###
+
 volumes:
 ###> doctrine/doctrine-bundle ###
   database_data:
 ###< doctrine/doctrine-bundle ###
+
+###> symfony/mercure-bundle ###
+  mercure_data:
+  mercure_config:
+###< symfony/mercure-bundle ###

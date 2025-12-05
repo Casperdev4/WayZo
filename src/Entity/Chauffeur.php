@@ -151,6 +151,18 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'boolean')]
     private bool $stripeAccountComplete = false;
 
+    /**
+     * Token FCM pour les push notifications
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $fcmToken = null;
+
+    /**
+     * Plateforme du token FCM (web, android, ios)
+     */
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $fcmPlatform = null;
+
     public function __construct()
     {
         $this->coursesVendues = new ArrayCollection();
@@ -691,5 +703,34 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
     public function canReceivePayments(): bool
     {
         return $this->stripeAccountId !== null && $this->stripeAccountComplete;
+    }
+
+    // ==================== FCM / PUSH NOTIFICATIONS ====================
+
+    public function getFcmToken(): ?string
+    {
+        return $this->fcmToken;
+    }
+
+    public function setFcmToken(?string $fcmToken): static
+    {
+        $this->fcmToken = $fcmToken;
+        return $this;
+    }
+
+    public function getFcmPlatform(): ?string
+    {
+        return $this->fcmPlatform;
+    }
+
+    public function setFcmPlatform(?string $fcmPlatform): static
+    {
+        $this->fcmPlatform = $fcmPlatform;
+        return $this;
+    }
+
+    public function hasPushNotificationsEnabled(): bool
+    {
+        return $this->fcmToken !== null;
     }
 }

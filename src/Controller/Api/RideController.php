@@ -16,6 +16,8 @@ use App\Repository\RideReportRepository;
 use App\Service\ActivityLogService;
 use App\Service\GeocodingService;
 use App\Service\EscrowService;
+use App\Service\MercureService;
+use App\Service\PushNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -36,7 +38,9 @@ class RideController extends AbstractController
         private GeocodingService $geocodingService,
         private AvisRepository $avisRepository,
         private RideReportRepository $rideReportRepository,
-        private EscrowService $escrowService
+        private EscrowService $escrowService,
+        private MercureService $mercureService,
+        private PushNotificationService $pushNotificationService
     ) {}
 
     /**
@@ -290,6 +294,12 @@ class RideController extends AbstractController
                 $ride->getDestination()
             );
 
+            // 🔥 Publier en temps réel via Mercure (nouvelle course disponible)
+            $this->mercureService->publishNewRide($this->serializeRide($ride));
+
+            // 📱 Notifier tous les chauffeurs d'une nouvelle course disponible
+            $this->pushNotificationService->notifyNewRide($this->serializeRide($ride));
+
             return new JsonResponse([
                 'success' => true,
                 'message' => 'Course créée avec succès',
@@ -437,6 +447,17 @@ class RideController extends AbstractController
             }
             
             $this->entityManager->flush();
+
+            // 🔥 Publier en temps réel via Mercure
+            $this->mercureService->publishRideStatusChange(
+                $ride->getId(),
+                'disponible',
+                'acceptée',
+                $this->serializeRide($ride)
+            );
+
+            // 📱 Notifier le propriétaire de la course
+            $this->pushNotificationService->notifyRideAccepted($owner, $this->serializeRide($ride), $user);
 
             return new JsonResponse([
                 'success' => true,
