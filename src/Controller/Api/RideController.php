@@ -155,9 +155,9 @@ class RideController extends AbstractController
         $user = $this->getUser();
         $status = $request->query->get('status');
         
-        // Récupérer les courses où l'utilisateur est vendeur OU chauffeur acceptant
+        // Récupérer les courses où l'utilisateur est créateur (chauffeur) OU chauffeur acceptant
         $qb = $this->rideRepository->createQueryBuilder('r')
-            ->where('r.vendeur = :user OR r.chauffeur = :user')
+            ->where('r.chauffeur = :user OR r.chauffeurAccepteur = :user')
             ->setParameter('user', $user)
             ->orderBy('r.date', 'DESC');
         
@@ -306,6 +306,11 @@ class RideController extends AbstractController
             if ($coords['arrival']) {
                 $ride->setDestinationLat($coords['arrival']['lat']);
                 $ride->setDestinationLng($coords['arrival']['lng']);
+            }
+
+            // Sauvegarder la distance calculée
+            if (isset($coords['distance'])) {
+                $ride->setDistance($coords['distance']);
             }
 
             $this->entityManager->persist($ride);
@@ -773,6 +778,7 @@ class RideController extends AbstractController
             'boosterSeat' => $ride->getBoosterSeat(),
             'babySeat' => $ride->getBabySeat(),
             'price' => $ride->getPrice(),
+            'distance' => $ride->getDistance(),
             'comment' => $ride->getComment(),
             'status' => $ride->getStatus(),
             'statusVendeur' => $ride->getStatusVendeur(),

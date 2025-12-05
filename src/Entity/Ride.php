@@ -114,6 +114,12 @@ class Ride
     #[ORM\Column(length: 30, nullable: true)]
     private ?string $paymentStatus = null;
 
+    /**
+     * Distance en kilomètres entre départ et destination
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $distance = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -513,6 +519,17 @@ class Ride
         );
         
         return $dateTime ?: null;
+    }
+
+    public function getDistance(): ?float
+    {
+        return $this->distance;
+    }
+
+    public function setDistance(?float $distance): static
+    {
+        $this->distance = $distance;
+        return $this;
     }
 }
 

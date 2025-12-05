@@ -53,9 +53,45 @@ class GeocodingService
      */
     public function geocodeRide(string $depart, string $destination): array
     {
+        $departure = $this->geocode($depart);
+        $arrival = $this->geocode($destination);
+        
+        $distance = null;
+        if ($departure && $arrival) {
+            $distance = $this->calculateDistance(
+                $departure['lat'], 
+                $departure['lng'], 
+                $arrival['lat'], 
+                $arrival['lng']
+            );
+        }
+        
         return [
-            'departure' => $this->geocode($depart),
-            'arrival' => $this->geocode($destination),
+            'departure' => $departure,
+            'arrival' => $arrival,
+            'distance' => $distance,
         ];
+    }
+
+    /**
+     * Calculer la distance en km entre deux points GPS (formule de Haversine)
+     */
+    public function calculateDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadius = 6371; // Rayon de la Terre en km
+
+        $latDiff = deg2rad($lat2 - $lat1);
+        $lngDiff = deg2rad($lng2 - $lng1);
+
+        $a = sin($latDiff / 2) * sin($latDiff / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($lngDiff / 2) * sin($lngDiff / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        $distance = $earthRadius * $c;
+
+        // Ajouter 20% pour les routes (approximation)
+        return round($distance * 1.2, 1);
     }
 }
