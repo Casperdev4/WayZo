@@ -1,5 +1,6 @@
 parameters:
     uploads_directory: '%kernel.project_dir%/public/uploads'
+    app.frontend_url: '%env(FRONTEND_URL)%'
 
 services:
     _defaults:

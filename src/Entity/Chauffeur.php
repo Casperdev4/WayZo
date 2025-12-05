@@ -163,6 +163,18 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $fcmPlatform = null;
 
+    /**
+     * Token de réinitialisation du mot de passe
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $resetToken = null;
+
+    /**
+     * Date d'expiration du token de réinitialisation
+     */
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $resetTokenExpiresAt = null;
+
     public function __construct()
     {
         $this->coursesVendues = new ArrayCollection();
@@ -732,5 +744,29 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
     public function hasPushNotificationsEnabled(): bool
     {
         return $this->fcmToken !== null;
+    }
+
+    // ==================== RESET PASSWORD ====================
+
+    public function getResetToken(): ?string
+    {
+        return $this->resetToken;
+    }
+
+    public function setResetToken(?string $resetToken): static
+    {
+        $this->resetToken = $resetToken;
+        return $this;
+    }
+
+    public function getResetTokenExpiresAt(): ?\DateTimeImmutable
+    {
+        return $this->resetTokenExpiresAt;
+    }
+
+    public function setResetTokenExpiresAt(?\DateTimeImmutable $resetTokenExpiresAt): static
+    {
+        $this->resetTokenExpiresAt = $resetTokenExpiresAt;
+        return $this;
     }
 }

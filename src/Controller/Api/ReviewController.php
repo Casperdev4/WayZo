@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\Avis;
+use App\Entity\Chauffeur;
 use App\Repository\AvisRepository;
 use App\Repository\RideRepository;
 use App\Repository\ChauffeurRepository;
@@ -30,6 +31,7 @@ class ReviewController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function createReview(int $rideId, Request $request): JsonResponse
     {
+        /** @var Chauffeur $user */
         $user = $this->getUser();
         $ride = $this->rideRepository->find($rideId);
         
@@ -94,6 +96,7 @@ class ReviewController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function canReview(int $rideId): JsonResponse
     {
+        /** @var Chauffeur $user */
         $user = $this->getUser();
         $ride = $this->rideRepository->find($rideId);
         

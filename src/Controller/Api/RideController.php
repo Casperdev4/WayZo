@@ -146,6 +146,36 @@ class RideController extends AbstractController
     }
 
     /**
+     * Liste des courses de l'utilisateur connecté (créées ou acceptées)
+     */
+    #[Route('/my', name: 'api_rides_my', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function myRides(Request $request): JsonResponse
+    {
+        $user = $this->getUser();
+        $status = $request->query->get('status');
+        
+        // Récupérer les courses où l'utilisateur est vendeur OU chauffeur acceptant
+        $qb = $this->rideRepository->createQueryBuilder('r')
+            ->where('r.vendeur = :user OR r.chauffeur = :user')
+            ->setParameter('user', $user)
+            ->orderBy('r.date', 'DESC');
+        
+        // Filtre par statut si demandé
+        if ($status) {
+            $qb->andWhere('r.status = :status')->setParameter('status', $status);
+        }
+        
+        $rides = $qb->getQuery()->getResult();
+        
+        $data = array_map(function (Ride $ride) use ($user) {
+            return $this->serializeRide($ride, $user);
+        }, $rides);
+
+        return new JsonResponse($data);
+    }
+
+    /**
      * Liste des courses d'un groupe spécifique
      */
     #[Route('/groupe/{groupeId}', name: 'api_rides_by_groupe', methods: ['GET'])]

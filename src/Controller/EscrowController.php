@@ -648,9 +648,10 @@ class EscrowController extends AbstractController
             return $this->json(['error' => 'Note requise'], 400);
         }
 
+        /** @var Chauffeur $admin */
         $admin = $this->getUser();
         $timestamp = (new \DateTime())->format('Y-m-d H:i:s');
-        $adminName = method_exists($admin, 'getFullName') ? $admin->getFullName() : $admin->getUserIdentifier();
+        $adminName = $admin->getFullName();
         
         $existingNotes = $escrow->getNotes() ?? '';
         $newNote = sprintf("[%s - %s] %s", $timestamp, $adminName, $data['note']);
@@ -716,7 +717,7 @@ class EscrowController extends AbstractController
             'id' => $seller->getId(),
             'fullName' => $seller->getPrenom() . ' ' . $seller->getNom(),
             'email' => $seller->getEmail(),
-            'phone' => method_exists($seller, 'getTelephone') ? $seller->getTelephone() : null,
+            'phone' => $seller->getTel(), // Utilise getTel() de Chauffeur
             'stripeAccountId' => $seller->getStripeAccountId()
         ];
 
@@ -727,7 +728,7 @@ class EscrowController extends AbstractController
                 'id' => $buyer->getId(),
                 'fullName' => $buyer->getPrenom() . ' ' . $buyer->getNom(),
                 'email' => $buyer->getEmail(),
-                'phone' => method_exists($buyer, 'getTelephone') ? $buyer->getTelephone() : null,
+                'phone' => $buyer->getTel(), // Utilise getTel() de Chauffeur
                 'stripeAccountId' => $buyer->getStripeAccountId()
             ];
         }
@@ -757,8 +758,7 @@ class EscrowController extends AbstractController
             'time' => $ride->getTime()?->format('H:i'),
             'price' => $ride->getPrice(),
             'status' => $ride->getStatus(),
-            'paymentStatus' => $ride->getPaymentStatus(),
-            'createdAt' => method_exists($ride, 'getCreatedAt') ? $ride->getCreatedAt()?->format('Y-m-d H:i:s') : null
+            'paymentStatus' => $ride->getPaymentStatus()
         ];
     }
 
