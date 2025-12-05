@@ -89,7 +89,7 @@ class RideController extends AbstractController
             ->where('r.chauffeurAccepteur = :chauffeur')
             ->andWhere('r.status IN (:statuses)')
             ->setParameter('chauffeur', $chauffeur)
-            ->setParameter('statuses', ['acceptée', 'en cours', 'prise en charge'])
+            ->setParameter('statuses', ['acceptée', 'en_cours', 'prise_en_charge'])
             ->orderBy('r.date', 'ASC')
             ->getQuery()
             ->getResult();

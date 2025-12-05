@@ -1,17 +1,36 @@
 nelmio_cors:
     defaults:
-        allow_origin: ['http://localhost:5173']
+        # Support dev (localhost) + production + app mobile Capacitor
+        allow_origin: 
+            - 'http://localhost:5173'
+            - 'http://localhost:5174'
+            - 'http://127.0.0.1:5173'
+            - 'https://wayzo.fr'
+            - 'https://www.wayzo.fr'
+            - 'https://api.wayzo.fr'
+            - 'capacitor://localhost'
+            - 'ionic://localhost'
+            - 'http://localhost'
         allow_methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-        allow_headers: ['Content-Type', 'Authorization']
+        allow_headers: ['Content-Type', 'Authorization', 'X-Requested-With']
         expose_headers: ['Authorization']
         max_age: 3600
         allow_credentials: true
 
     paths:
         '^/api/':
-            allow_origin: ['http://localhost:5173']
+            allow_origin: 
+                - 'http://localhost:5173'
+                - 'http://localhost:5174'
+                - 'http://127.0.0.1:5173'
+                - 'https://wayzo.fr'
+                - 'https://www.wayzo.fr'
+                - 'capacitor://localhost'
+                - 'ionic://localhost'
+                - 'http://localhost'
             allow_methods: ['OPTIONS', 'GET', 'POST', 'PUT', 'DELETE']
-            allow_headers: ['Content-Type', 'Authorization']
+            allow_headers: ['Content-Type', 'Authorization', 'X-Requested-With']
             expose_headers: ['Authorization']
             max_age: 3600
             allow_credentials: true
+

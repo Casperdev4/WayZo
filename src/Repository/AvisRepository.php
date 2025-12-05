@@ -115,6 +115,34 @@ class AvisRepository extends ServiceEntityRepository
     }
 
     /**
+     * Vérifie si un avis existe déjà pour une ride
+     */
+    public function existsForRide(int $rideId): bool
+    {
+        return (bool) $this->createQueryBuilder('a')
+            ->select('COUNT(a.id)')
+            ->where('a.ride = :rideId')
+            ->setParameter('rideId', $rideId)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Vérifie si un chauffeur a déjà noté un autre pour une ride
+     */
+    public function existsForRideAndAuteur(int $rideId, int $auteurId): bool
+    {
+        return (bool) $this->createQueryBuilder('a')
+            ->select('COUNT(a.id)')
+            ->where('a.ride = :rideId')
+            ->andWhere('a.auteur = :auteurId')
+            ->setParameter('rideId', $rideId)
+            ->setParameter('auteurId', $auteurId)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
      * Récupère les derniers avis de la plateforme
      */
     public function findLatest(int $limit = 10): array

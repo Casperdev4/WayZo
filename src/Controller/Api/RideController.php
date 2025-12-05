@@ -6,12 +6,16 @@ use App\Entity\Ride;
 use App\Entity\Groupe;
 use App\Entity\Notification;
 use App\Entity\Conversation;
+use App\Entity\RideReport;
 use App\Repository\RideRepository;
 use App\Repository\GroupeRepository;
 use App\Repository\GroupeMembreRepository;
 use App\Repository\ConversationRepository;
+use App\Repository\AvisRepository;
+use App\Repository\RideReportRepository;
 use App\Service\ActivityLogService;
 use App\Service\GeocodingService;
+use App\Service\EscrowService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,7 +33,10 @@ class RideController extends AbstractController
         private GroupeMembreRepository $groupeMembreRepository,
         private ConversationRepository $conversationRepository,
         private ActivityLogService $activityLogService,
-        private GeocodingService $geocodingService
+        private GeocodingService $geocodingService,
+        private AvisRepository $avisRepository,
+        private RideReportRepository $rideReportRepository,
+        private EscrowService $escrowService
     ) {}
 
     /**
@@ -270,6 +277,11 @@ class RideController extends AbstractController
             $this->entityManager->persist($ride);
             $this->entityManager->flush();
 
+            // Créer l'escrow pour la course (mode optionnel - le blocage sera fait au paiement)
+            // Le paiement sera bloqué via l'endpoint /api/escrow/hold-funds
+            $ride->setPaymentStatus('pending');
+            $this->entityManager->flush();
+
             // 🔥 Logger l'activité
             $this->activityLogService->logRideCreated(
                 $user, 
@@ -460,7 +472,7 @@ class RideController extends AbstractController
             }
             
             // Valider le statut
-            $validStatuses = ['acceptée', 'en_cours', 'terminée', 'annulée'];
+            $validStatuses = ['acceptée', 'en_cours', 'prise_en_charge', 'terminée', 'annulée'];
             if (!in_array($newStatus, $validStatuses)) {
                 return new JsonResponse([
                     'success' => false,
@@ -469,6 +481,38 @@ class RideController extends AbstractController
             }
             
             $ride->setStatus($newStatus);
+            
+            // Créer une notification pour le propriétaire de la course
+            $owner = $ride->getChauffeur();
+            $chauffeur = $ride->getChauffeurAccepteur();
+            if ($owner && $owner !== $user && $chauffeur) {
+                $notification = new Notification();
+                $notification->setRecipient($owner);
+                $notification->setSender($chauffeur);
+                $notification->setRide($ride);
+                
+                switch ($newStatus) {
+                    case 'en_cours':
+                        $notification->setType(Notification::TYPE_RIDE_STARTED);
+                        $notification->setTitle('Course démarrée');
+                        $notification->setMessage($chauffeur->getPrenom() . ' est en route vers le point de départ');
+                        $this->entityManager->persist($notification);
+                        break;
+                    case 'prise_en_charge':
+                        $notification->setType(Notification::TYPE_RIDE_STARTED);
+                        $notification->setTitle('Client pris en charge');
+                        $notification->setMessage('Le client est à bord, course en direction de ' . $ride->getDestination());
+                        $this->entityManager->persist($notification);
+                        break;
+                    case 'terminée':
+                        $notification->setType(Notification::TYPE_RIDE_COMPLETED);
+                        $notification->setTitle('Course terminée');
+                        $notification->setMessage('La course ' . $ride->getDepart() . ' → ' . $ride->getDestination() . ' est terminée');
+                        $this->entityManager->persist($notification);
+                        break;
+                }
+            }
+            
             $this->entityManager->flush();
             
             return new JsonResponse([
@@ -485,12 +529,184 @@ class RideController extends AbstractController
     }
 
     /**
+     * Annuler une course
+     */
+    #[Route('/{id}/cancel', name: 'api_rides_cancel', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function cancel(Ride $ride, Request $request): JsonResponse
+    {
+        try {
+            /** @var \App\Entity\Chauffeur $user */
+            $user = $this->getUser();
+            $data = json_decode($request->getContent(), true);
+            $reason = $data['reason'] ?? 'Aucune raison spécifiée';
+            
+            // Vérifier que l'utilisateur est autorisé (propriétaire ou accepteur)
+            $isOwner = $ride->getChauffeur() === $user;
+            $isAcceptor = $ride->getChauffeurAccepteur() === $user;
+            
+            if (!$isOwner && !$isAcceptor) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'Vous n\'êtes pas autorisé à annuler cette course'
+                ], 403);
+            }
+            
+            // Vérifier que la course n'est pas déjà terminée
+            if ($ride->getStatus() === 'terminée') {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'Impossible d\'annuler une course terminée'
+                ], 400);
+            }
+            
+            $oldStatus = $ride->getStatus();
+            $ride->setStatus('annulée');
+            $ride->setComment(($ride->getComment() ?? '') . "\n\n[ANNULATION] " . $reason);
+            
+            // Notifier l'autre partie
+            $recipient = $isOwner ? $ride->getChauffeurAccepteur() : $ride->getChauffeur();
+            if ($recipient) {
+                $notification = new Notification();
+                $notification->setRecipient($recipient);
+                $notification->setSender($user);
+                $notification->setType(Notification::TYPE_RIDE_CANCELLED);
+                $notification->setTitle('Course annulée');
+                $notification->setMessage(
+                    $user->getPrenom() . ' a annulé la course ' . 
+                    $ride->getDepart() . ' → ' . $ride->getDestination() . 
+                    '. Raison : ' . $reason
+                );
+                $notification->setRide($ride);
+                $this->entityManager->persist($notification);
+            }
+            
+            $this->entityManager->flush();
+            
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Course annulée avec succès',
+                'ride' => $this->serializeRide($ride, $user)
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Erreur: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * Signaler un problème sur une course
+     */
+    #[Route('/{id}/report', name: 'api_rides_report', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function report(Ride $ride, Request $request): JsonResponse
+    {
+        try {
+            /** @var \App\Entity\Chauffeur $user */
+            $user = $this->getUser();
+            $data = json_decode($request->getContent(), true);
+            
+            // Vérifier que l'utilisateur est impliqué dans la course
+            $isOwner = $ride->getChauffeur() === $user;
+            $isAcceptor = $ride->getChauffeurAccepteur() === $user;
+            
+            if (!$isOwner && !$isAcceptor) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'Vous n\'êtes pas autorisé à signaler cette course'
+                ], 403);
+            }
+            
+            // Valider le type de signalement
+            $validTypes = [
+                RideReport::TYPE_CLIENT_ABSENT,
+                RideReport::TYPE_CLIENT_RETARD,
+                RideReport::TYPE_MAUVAISE_ADRESSE,
+                RideReport::TYPE_CLIENT_ANNULE,
+                RideReport::TYPE_COMPORTEMENT,
+                RideReport::TYPE_PAIEMENT,
+                RideReport::TYPE_AUTRE,
+            ];
+            
+            $type = $data['type'] ?? RideReport::TYPE_AUTRE;
+            if (!in_array($type, $validTypes)) {
+                $type = RideReport::TYPE_AUTRE;
+            }
+            
+            $description = $data['description'] ?? '';
+            if (empty($description)) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'La description est obligatoire'
+                ], 400);
+            }
+            
+            // Créer le signalement
+            $report = new RideReport();
+            $report->setRide($ride);
+            $report->setReporter($user);
+            $report->setType($type);
+            $report->setDescription($description);
+            $report->setStatus(RideReport::STATUS_PENDING);
+            
+            $this->entityManager->persist($report);
+            
+            // Notifier les admins (on pourrait envoyer un email ici aussi)
+            // Pour l'instant, le signalement sera visible dans le panel admin
+            
+            $this->entityManager->flush();
+            
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Signalement envoyé à l\'administration',
+                'report' => $report->toArray()
+            ]);
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Erreur: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * Récupérer les types de signalement disponibles
+     */
+    #[Route('/report-types', name: 'api_rides_report_types', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function getReportTypes(): JsonResponse
+    {
+        return new JsonResponse([
+            ['value' => RideReport::TYPE_CLIENT_ABSENT, 'label' => 'Client absent'],
+            ['value' => RideReport::TYPE_CLIENT_RETARD, 'label' => 'Client en retard'],
+            ['value' => RideReport::TYPE_MAUVAISE_ADRESSE, 'label' => 'Mauvaise adresse'],
+            ['value' => RideReport::TYPE_CLIENT_ANNULE, 'label' => 'Client a annulé sur place'],
+            ['value' => RideReport::TYPE_COMPORTEMENT, 'label' => 'Problème de comportement'],
+            ['value' => RideReport::TYPE_PAIEMENT, 'label' => 'Problème de paiement'],
+            ['value' => RideReport::TYPE_AUTRE, 'label' => 'Autre problème'],
+        ]);
+    }
+
+    /**
      * Sérialiser une course en tableau
      */
     private function serializeRide(Ride $ride, $currentUser = null): array
     {
         $isOwner = $currentUser && $ride->getChauffeur() && $ride->getChauffeur()->getId() === $currentUser->getId();
         $isAcceptor = $currentUser && $ride->getChauffeurAccepteur() && $ride->getChauffeurAccepteur()->getId() === $currentUser->getId();
+        
+        // Récupérer les notes moyennes des chauffeurs
+        $chauffeurRating = null;
+        $chauffeurAccepteurRating = null;
+        
+        if ($ride->getChauffeur()) {
+            $chauffeurRating = $this->avisRepository->getAverageRating($ride->getChauffeur());
+        }
+        if ($ride->getChauffeurAccepteur()) {
+            $chauffeurAccepteurRating = $this->avisRepository->getAverageRating($ride->getChauffeurAccepteur());
+        }
         
         return [
             'id' => $ride->getId(),
@@ -522,10 +738,12 @@ class RideController extends AbstractController
             'chauffeur' => $ride->getChauffeur() ? [
                 'id' => $ride->getChauffeur()->getId(),
                 'name' => $ride->getChauffeur()->getPrenom() . ' ' . $ride->getChauffeur()->getNom(),
+                'averageRating' => $chauffeurRating,
             ] : null,
             'chauffeurAccepteur' => $ride->getChauffeurAccepteur() ? [
                 'id' => $ride->getChauffeurAccepteur()->getId(),
                 'name' => $ride->getChauffeurAccepteur()->getPrenom() . ' ' . $ride->getChauffeurAccepteur()->getNom(),
+                'averageRating' => $chauffeurAccepteurRating,
             ] : null,
         ];
     }

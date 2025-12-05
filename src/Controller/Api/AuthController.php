@@ -20,14 +20,8 @@ class AuthController extends AbstractController
         ]);
     }
 
-    #[Route('/api/login', name: 'api_login', methods: ['POST'])]
-    public function login(): JsonResponse
-    {
-        return new JsonResponse([
-            'status' => 'ok',
-            'message' => 'API login route active'
-        ]);
-    }
+    // NOTE: La route /api/login est gérée par le json_login dans security.yaml
+    // Ne PAS ajouter de contrôleur ici, sinon ça override le comportement JWT
 }
 
 

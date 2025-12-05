@@ -102,6 +102,18 @@ class Ride
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $destinationLng = null;
 
+    /**
+     * Paiement escrow associé à cette course
+     */
+    #[ORM\OneToOne(mappedBy: 'ride', cascade: ['persist', 'remove'])]
+    private ?EscrowPayment $escrowPayment = null;
+
+    /**
+     * Statut de paiement de la course
+     */
+    #[ORM\Column(length: 30, nullable: true)]
+    private ?string $paymentStatus = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -436,6 +448,71 @@ class Ride
             ];
         }
         return null;
+    }
+
+    // ==================== ESCROW PAYMENT ====================
+
+    public function getEscrowPayment(): ?EscrowPayment
+    {
+        return $this->escrowPayment;
+    }
+
+    public function setEscrowPayment(?EscrowPayment $escrowPayment): static
+    {
+        // Définir le côté propriétaire de la relation
+        if ($escrowPayment !== null && $escrowPayment->getRide() !== $this) {
+            $escrowPayment->setRide($this);
+        }
+
+        $this->escrowPayment = $escrowPayment;
+        return $this;
+    }
+
+    public function getPaymentStatus(): ?string
+    {
+        return $this->paymentStatus;
+    }
+
+    public function setPaymentStatus(?string $paymentStatus): static
+    {
+        $this->paymentStatus = $paymentStatus;
+        return $this;
+    }
+
+    /**
+     * Vérifie si le paiement est sécurisé (fonds bloqués)
+     */
+    public function isPaymentSecured(): bool
+    {
+        return $this->escrowPayment !== null 
+            && $this->escrowPayment->getStatus() === EscrowPayment::STATUS_HELD;
+    }
+
+    /**
+     * Récupère le montant total bloqué (prix + commission)
+     */
+    public function getTotalBlockedAmount(): ?float
+    {
+        return $this->escrowPayment 
+            ? (float) $this->escrowPayment->getTotalAmount() 
+            : null;
+    }
+
+    /**
+     * Retourne la date et l'heure combinées de la course
+     */
+    public function getRideDateTime(): ?\DateTimeInterface
+    {
+        if (!$this->date || !$this->time) {
+            return null;
+        }
+        
+        $dateTime = \DateTime::createFromFormat(
+            'Y-m-d H:i:s',
+            $this->date->format('Y-m-d') . ' ' . $this->time->format('H:i:s')
+        );
+        
+        return $dateTime ?: null;
     }
 }
 

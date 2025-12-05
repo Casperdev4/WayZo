@@ -126,6 +126,7 @@ class TrackingController extends AbstractController
                 'lng' => $lastPosition->getLongitude(),
                 'speed' => $lastPosition->getSpeed(),
                 'heading' => $lastPosition->getHeading(),
+                'accuracy' => $lastPosition->getAccuracy(),
                 'timestamp' => $lastPosition->getTimestamp()->format('c'),
             ] : null,
             'ride' => [

@@ -46,11 +46,18 @@ class Avis
     private ?Chauffeur $chauffeurNote = null;
 
     /**
-     * La course liée à cet avis
+     * La course liée à cet avis (ancienne entité)
      */
     #[ORM\OneToOne(targetEntity: Course::class, inversedBy: 'avis')]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: true)]
     private ?Course $course = null;
+
+    /**
+     * La course liée à cet avis (nouvelle entité Ride)
+     */
+    #[ORM\ManyToOne(targetEntity: Ride::class)]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?Ride $ride = null;
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE)]
     private ?\DateTimeImmutable $createdAt = null;
@@ -126,6 +133,17 @@ class Avis
         return $this;
     }
 
+    public function getRide(): ?Ride
+    {
+        return $this->ride;
+    }
+
+    public function setRide(?Ride $ride): static
+    {
+        $this->ride = $ride;
+        return $this;
+    }
+
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
@@ -151,12 +169,20 @@ class Avis
                 'nom' => $this->auteur?->getNom(),
                 'prenom' => $this->auteur?->getPrenom(),
             ],
+            'auteurName' => $this->auteur ? $this->auteur->getPrenom() . ' ' . $this->auteur->getNom() : null,
             'chauffeurNote' => [
                 'id' => $this->chauffeurNote?->getId(),
                 'nom' => $this->chauffeurNote?->getNom(),
                 'prenom' => $this->chauffeurNote?->getPrenom(),
             ],
+            'chauffeurNoteName' => $this->chauffeurNote ? $this->chauffeurNote->getPrenom() . ' ' . $this->chauffeurNote->getNom() : null,
             'courseId' => $this->course?->getId(),
+            'rideId' => $this->ride?->getId(),
+            'rideInfo' => $this->ride ? [
+                'id' => $this->ride->getId(),
+                'depart' => $this->ride->getDepart(),
+                'destination' => $this->ride->getDestination(),
+            ] : null,
             'createdAt' => $this->createdAt?->format('Y-m-d H:i:s'),
         ];
     }

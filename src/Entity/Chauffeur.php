@@ -127,6 +127,30 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\OneToMany(targetEntity: Avis::class, mappedBy: 'chauffeurNote')]
     private Collection $avisRecus;
 
+    /**
+     * Moyens de paiement du chauffeur
+     */
+    #[ORM\OneToMany(targetEntity: PaymentMethod::class, mappedBy: 'chauffeur', cascade: ['persist', 'remove'])]
+    private Collection $paymentMethods;
+
+    /**
+     * ID client Stripe (pour les paiements)
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $stripeCustomerId = null;
+
+    /**
+     * ID compte Connect Stripe (pour recevoir les paiements)
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $stripeAccountId = null;
+
+    /**
+     * Statut du compte Connect Stripe
+     */
+    #[ORM\Column(type: 'boolean')]
+    private bool $stripeAccountComplete = false;
+
     public function __construct()
     {
         $this->coursesVendues = new ArrayCollection();
@@ -141,6 +165,7 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
         $this->rides = new ArrayCollection();
         $this->avisDonnes = new ArrayCollection();
         $this->avisRecus = new ArrayCollection();
+        $this->paymentMethods = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -570,5 +595,101 @@ class Chauffeur implements UserInterface, PasswordAuthenticatedUserInterface
             }
         }
         return $this;
+    }
+
+    /**
+     * @return Collection<int, PaymentMethod>
+     */
+    public function getPaymentMethods(): Collection
+    {
+        return $this->paymentMethods;
+    }
+
+    public function addPaymentMethod(PaymentMethod $paymentMethod): static
+    {
+        if (!$this->paymentMethods->contains($paymentMethod)) {
+            $this->paymentMethods->add($paymentMethod);
+            $paymentMethod->setChauffeur($this);
+        }
+        return $this;
+    }
+
+    public function removePaymentMethod(PaymentMethod $paymentMethod): static
+    {
+        if ($this->paymentMethods->removeElement($paymentMethod)) {
+            if ($paymentMethod->getChauffeur() === $this) {
+                $paymentMethod->setChauffeur(null);
+            }
+        }
+        return $this;
+    }
+
+    /**
+     * Retourne le moyen de paiement par défaut
+     */
+    public function getDefaultPaymentMethod(): ?PaymentMethod
+    {
+        foreach ($this->paymentMethods as $method) {
+            if ($method->isDefault() && $method->isActive()) {
+                return $method;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Vérifie si le chauffeur a configuré au moins un moyen de paiement
+     */
+    public function hasPaymentMethod(): bool
+    {
+        foreach ($this->paymentMethods as $method) {
+            if ($method->isActive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ==================== STRIPE ====================
+
+    public function getStripeCustomerId(): ?string
+    {
+        return $this->stripeCustomerId;
+    }
+
+    public function setStripeCustomerId(?string $stripeCustomerId): static
+    {
+        $this->stripeCustomerId = $stripeCustomerId;
+        return $this;
+    }
+
+    public function getStripeAccountId(): ?string
+    {
+        return $this->stripeAccountId;
+    }
+
+    public function setStripeAccountId(?string $stripeAccountId): static
+    {
+        $this->stripeAccountId = $stripeAccountId;
+        return $this;
+    }
+
+    public function isStripeAccountComplete(): bool
+    {
+        return $this->stripeAccountComplete;
+    }
+
+    public function setStripeAccountComplete(bool $stripeAccountComplete): static
+    {
+        $this->stripeAccountComplete = $stripeAccountComplete;
+        return $this;
+    }
+
+    /**
+     * Vérifie si le chauffeur peut recevoir des paiements via Stripe
+     */
+    public function canReceivePayments(): bool
+    {
+        return $this->stripeAccountId !== null && $this->stripeAccountComplete;
     }
 }

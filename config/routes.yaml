@@ -3,3 +3,8 @@ controllers:
         path: ../src/Controller/
         namespace: App\Controller
     type: attribute
+
+# Route pour le login JWT (géré par le firewall security.yaml)
+api_login:
+    path: /api/login
+    methods: POST

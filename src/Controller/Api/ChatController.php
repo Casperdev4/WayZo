@@ -128,6 +128,29 @@ class ChatController extends BaseApiController
     }
 
     /**
+     * Compter le nombre total de messages non lus
+     */
+    #[Route('/conversations/unread-count', name: 'api_conversations_unread_count', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function getUnreadMessagesCount(): JsonResponse
+    {
+        $user = $this->getChauffeur();
+        $totalUnread = 0;
+
+        // Compter depuis les conversations Ride
+        $rideConversations = $this->conversationRepository->findByUser($user);
+        foreach ($rideConversations as $conv) {
+            foreach ($conv->getMessages() as $msg) {
+                if ($msg->getExpediteur() !== $user && !$msg->isRead()) {
+                    $totalUnread++;
+                }
+            }
+        }
+
+        return new JsonResponse(['count' => $totalUnread]);
+    }
+
+    /**
      * Récupérer une conversation complète
      * Supporte les formats: chat-{courseId} et ride-{conversationId}
      */
@@ -537,7 +560,7 @@ class ChatController extends BaseApiController
     /**
      * Récupérer les messages d'une conversation
      */
-    #[Route('/conversations/{id}', name: 'api_conversation_messages', methods: ['GET'])]
+    #[Route('/conversations/{id<\d+>}', name: 'api_conversation_messages', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function getConversationMessages(Conversation $conversation): JsonResponse
     {
@@ -590,7 +613,7 @@ class ChatController extends BaseApiController
     /**
      * Envoyer un message dans une conversation
      */
-    #[Route('/conversations/{id}/messages', name: 'api_conversation_send_message', methods: ['POST'])]
+    #[Route('/conversations/{id<\d+>}/messages', name: 'api_conversation_send_message', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function sendConversationMessage(Conversation $conversation, Request $request): JsonResponse
     {

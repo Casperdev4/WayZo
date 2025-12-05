@@ -13,6 +13,7 @@ class Notification
     public const TYPE_RIDE_ACCEPTED = 'ride_accepted';
     public const TYPE_RIDE_STARTED = 'ride_started';
     public const TYPE_RIDE_COMPLETED = 'ride_completed';
+    public const TYPE_RIDE_CANCELLED = 'ride_cancelled';
     public const TYPE_NEW_MESSAGE = 'new_message';
     public const TYPE_SYSTEM = 'system';
 
