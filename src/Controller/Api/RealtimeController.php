@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Entity\Chauffeur;
 use App\Service\MercureService;
 use App\Service\PushNotificationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -22,12 +23,22 @@ class RealtimeController extends AbstractController
     ) {}
 
     /**
+     * Récupérer le chauffeur connecté (helper typé)
+     */
+    private function getChauffeur(): Chauffeur
+    {
+        /** @var Chauffeur $user */
+        $user = $this->getUser();
+        return $user;
+    }
+
+    /**
      * Obtenir la configuration Mercure pour le client
      */
     #[Route('/config', name: 'api_realtime_config', methods: ['GET'])]
     public function getConfig(Request $request): JsonResponse
     {
-        $user = $this->getUser();
+        $user = $this->getChauffeur();
         
         // Topics autorisés pour cet utilisateur
         $topics = [
@@ -61,7 +72,7 @@ class RealtimeController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $topics = $data['topics'] ?? [];
-        $user = $this->getUser();
+        $user = $this->getChauffeur();
 
         // Valider et filtrer les topics
         $allowedTopics = [];
@@ -97,7 +108,7 @@ class RealtimeController extends AbstractController
             return $this->json(['error' => 'Token FCM requis'], 400);
         }
 
-        $user = $this->getUser();
+        $user = $this->getChauffeur();
         $this->pushNotificationService->registerToken($user, $token, $platform);
 
         return $this->json([
@@ -113,7 +124,7 @@ class RealtimeController extends AbstractController
     #[Route('/fcm/unregister', name: 'api_realtime_fcm_unregister', methods: ['POST'])]
     public function unregisterFcmToken(): JsonResponse
     {
-        $user = $this->getUser();
+        $user = $this->getChauffeur();
         $this->pushNotificationService->unregisterToken($user);
 
         return $this->json([
@@ -128,7 +139,7 @@ class RealtimeController extends AbstractController
     #[Route('/fcm/test', name: 'api_realtime_fcm_test', methods: ['POST'])]
     public function testPushNotification(): JsonResponse
     {
-        $user = $this->getUser();
+        $user = $this->getChauffeur();
 
         $result = $this->pushNotificationService->sendToUser(
             $user,
@@ -140,7 +151,7 @@ class RealtimeController extends AbstractController
 
         return $this->json([
             'success' => $result,
-            'hasFcmToken' => $user->hasPushNotificationsEnabled()
+            'hasFcmToken' => $user->getFcmToken() !== null
         ]);
     }
 
@@ -158,7 +169,7 @@ class RealtimeController extends AbstractController
             return $this->json(['error' => 'conversationId requis'], 400);
         }
 
-        $user = $this->getUser();
+        $user = $this->getChauffeur();
         
         $this->mercureService->publishTypingIndicator(
             $conversationId,
@@ -173,7 +184,7 @@ class RealtimeController extends AbstractController
     /**
      * Vérifier si un topic est autorisé pour l'utilisateur
      */
-    private function isTopicAllowed(string $topic, $user): bool
+    private function isTopicAllowed(string $topic, Chauffeur $user): bool
     {
         $userId = $user->getId();
 

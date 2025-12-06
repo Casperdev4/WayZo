@@ -144,9 +144,8 @@ class EscrowService
         $escrow->setMarkedCompletedAt($now);
         $escrow->setStatus(EscrowPayment::STATUS_AWAITING_VALIDATION);
 
-        // Mettre à jour le statut de la course
+        // Mettre à jour le statut de paiement de la course (le statut de la course est géré par RideController)
         $ride = $escrow->getRide();
-        $ride->setStatus('completed');
         $ride->setPaymentStatus('awaiting_validation');
 
         $this->entityManager->flush();

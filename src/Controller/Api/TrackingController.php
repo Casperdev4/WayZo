@@ -41,8 +41,8 @@ class TrackingController extends AbstractController
             return $this->json(['error' => 'Non autorisé'], 403);
         }
         
-        // La course doit être en cours
-        if ($ride->getStatus() !== 'en_cours') {
+        // La course doit être en cours ou le client doit être à bord
+        if (!in_array($ride->getStatus(), ['en_cours', 'prise_en_charge'])) {
             return $this->json(['error' => 'La course n\'est pas en cours'], 400);
         }
         

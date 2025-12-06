@@ -327,6 +327,9 @@ class PushNotificationService
         $notification->setMessage($body);
         $notification->setType($data['type'] ?? 'general');
         $notification->setIsRead(false);
+        
+        // Stocker les métadonnées additionnelles (conversationId, rideId, etc.)
+        $notification->setData($data);
 
         $this->entityManager->persist($notification);
         $this->entityManager->flush();

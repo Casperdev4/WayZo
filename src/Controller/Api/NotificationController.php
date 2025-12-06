@@ -49,6 +49,7 @@ class NotificationController extends AbstractController
                 'message' => $notif->getMessage(),
                 'isRead' => $notif->isRead(),
                 'createdAt' => $notif->getCreatedAt()?->format('c'),
+                'data' => $notif->getData(), // 🔥 Inclure les métadonnées
                 'sender' => $notif->getSender() ? [
                     'id' => $notif->getSender()->getId(),
                     'name' => $notif->getSender()->getPrenom() . ' ' . $notif->getSender()->getNom(),

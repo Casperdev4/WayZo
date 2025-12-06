@@ -57,4 +57,18 @@ class ConversationRepository extends ServiceEntityRepository
             ->getQuery()
             ->getOneOrNullResult();
     }
+
+    /**
+     * Trouve une conversation directe (sans ride) entre deux chauffeurs
+     */
+    public function findDirectConversationBetween(Chauffeur $chauffeur1, Chauffeur $chauffeur2): ?Conversation
+    {
+        return $this->createQueryBuilder('c')
+            ->where('c.ride IS NULL')
+            ->andWhere('(c.chauffeur1 = :c1 AND c.chauffeur2 = :c2) OR (c.chauffeur1 = :c2 AND c.chauffeur2 = :c1)')
+            ->setParameter('c1', $chauffeur1)
+            ->setParameter('c2', $chauffeur2)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 }

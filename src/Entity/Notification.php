@@ -47,6 +47,9 @@ class Notification
     #[ORM\ManyToOne(targetEntity: Ride::class)]
     private ?Ride $ride = null;
 
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $data = null;
+
     #[ORM\PrePersist]
     public function prePersist(): void
     {
@@ -143,6 +146,17 @@ class Notification
     public function setRide(?Ride $ride): static
     {
         $this->ride = $ride;
+        return $this;
+    }
+
+    public function getData(): ?array
+    {
+        return $this->data;
+    }
+
+    public function setData(?array $data): static
+    {
+        $this->data = $data;
         return $this;
     }
 }

@@ -565,11 +565,29 @@ class RideController extends AbstractController
                         $notification->setTitle('Course terminée');
                         $notification->setMessage('La course ' . $ride->getDepart() . ' → ' . $ride->getDestination() . ' est terminée');
                         $this->entityManager->persist($notification);
+                        
+                        // 💰 Mettre à jour l'escrow pour validation
+                        $escrow = $ride->getEscrowPayment();
+                        if ($escrow && $escrow->getStatus() === \App\Entity\EscrowPayment::STATUS_HELD) {
+                            try {
+                                $this->escrowService->markCompleted($escrow, $chauffeur);
+                            } catch (\Exception $e) {
+                                // Log l'erreur mais ne bloque pas le changement de statut
+                            }
+                        }
                         break;
                 }
             }
             
             $this->entityManager->flush();
+            
+            // 🔥 Publier le changement de statut via Mercure
+            $this->mercureService->publishRideStatusChange(
+                $ride->getId(),
+                $ride->getStatus(), // Ancien statut (déjà mis à jour, mais c'est pour le contexte)
+                $newStatus,
+                $this->serializeRide($ride, $user)
+            );
             
             return new JsonResponse([
                 'success' => true,
@@ -764,6 +782,25 @@ class RideController extends AbstractController
             $chauffeurAccepteurRating = $this->avisRepository->getAverageRating($ride->getChauffeurAccepteur());
         }
         
+        // Récupérer les infos d'escrow si disponibles
+        $escrowData = null;
+        $escrow = $ride->getEscrowPayment();
+        if ($escrow) {
+            $escrowData = [
+                'id' => $escrow->getId(),
+                'status' => $escrow->getStatus(),
+                'rideAmount' => (float) $escrow->getRideAmount(),
+                'commissionAmount' => (float) $escrow->getCommissionAmount(),
+                'totalAmount' => (float) $escrow->getTotalAmount(),
+                'heldAt' => $escrow->getHeldAt()?->format('c'),
+                'markedCompletedAt' => $escrow->getMarkedCompletedAt()?->format('c'),
+                'confirmedAt' => $escrow->getConfirmedAt()?->format('c'),
+                'paidAt' => $escrow->getPaidAt()?->format('c'),
+                // canConfirm: Le propriétaire (A) peut confirmer quand l'escrow est en awaiting_validation
+                'canConfirm' => $isOwner && $escrow->getStatus() === \App\Entity\EscrowPayment::STATUS_AWAITING_VALIDATION,
+            ];
+        }
+        
         return [
             'id' => $ride->getId(),
             'clientName' => $ride->getClientName(),
@@ -782,6 +819,7 @@ class RideController extends AbstractController
             'comment' => $ride->getComment(),
             'status' => $ride->getStatus(),
             'statusVendeur' => $ride->getStatusVendeur(),
+            'paymentStatus' => $ride->getPaymentStatus(),
             'visibility' => $ride->getVisibility(),
             'isOwner' => $isOwner,
             'isAcceptor' => $isAcceptor,
@@ -802,6 +840,7 @@ class RideController extends AbstractController
                 'name' => $ride->getChauffeurAccepteur()->getPrenom() . ' ' . $ride->getChauffeurAccepteur()->getNom(),
                 'averageRating' => $chauffeurAccepteurRating,
             ] : null,
+            'escrow' => $escrowData,
         ];
     }
 }

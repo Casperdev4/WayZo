@@ -587,6 +587,51 @@ class ChatController extends BaseApiController
     }
 
     /**
+     * Récupérer ou créer une conversation directe avec un utilisateur
+     */
+    #[Route('/conversations/user/{userId}', name: 'api_conversation_user', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function getOrCreateConversationWithUser(int $userId): JsonResponse
+    {
+        $user = $this->getChauffeur();
+        
+        // Vérifier qu'on ne discute pas avec soi-même
+        if ($user->getId() === $userId) {
+            return new JsonResponse(['error' => 'Impossible de discuter avec vous-même'], 400);
+        }
+        
+        // Trouver l'autre utilisateur
+        $otherUser = $this->chauffeurRepository->find($userId);
+        if (!$otherUser) {
+            return new JsonResponse(['error' => 'Utilisateur non trouvé'], 404);
+        }
+        
+        // Chercher une conversation existante entre ces deux utilisateurs
+        $conversation = $this->conversationRepository->findDirectConversationBetween($user, $otherUser);
+        
+        // Créer si elle n'existe pas
+        if (!$conversation) {
+            $conversation = new Conversation();
+            $conversation->setChauffeur1($user);
+            $conversation->setChauffeur2($otherUser);
+            // Pas de ride associé - c'est une conversation directe
+            
+            $this->em->persist($conversation);
+            $this->em->flush();
+        }
+        
+        return new JsonResponse([
+            'id' => $conversation->getId(),
+            'participant' => [
+                'id' => $otherUser->getId(),
+                'name' => $otherUser->getPrenom() . ' ' . $otherUser->getNom(),
+                'avatar' => '/img/avatars/thumb-' . ($otherUser->getId() % 15 + 1) . '.jpg',
+            ],
+            'createdAt' => $conversation->getCreatedAt()?->format('c'),
+        ], 201);
+    }
+
+    /**
      * Récupérer les messages d'une conversation
      */
     #[Route('/conversations/{id<\d+>}', name: 'api_conversation_messages', methods: ['GET'])]
@@ -680,6 +725,31 @@ class ChatController extends BaseApiController
             $notification->setMessage($user->getPrenom() . ' vous a envoyé un message');
             $notification->setRide($conversation->getRide());
             $this->em->persist($notification);
+
+            // 🔥 Publier en temps réel via Mercure
+            $this->mercureService->publishChatMessage(
+                $conversation->getId(),
+                [
+                    'id' => 'msg-' . $message->getId(),
+                    'sender' => [
+                        'id' => $user->getId(),
+                        'name' => $user->getPrenom() . ' ' . $user->getNom(),
+                        'avatarImageUrl' => '/img/avatars/thumb-' . ($user->getId() % 15 + 1) . '.jpg',
+                    ],
+                    'content' => $message->getContenu(),
+                    'timestamp' => $message->getDateEnvoi()->getTimestamp(),
+                    'type' => 'regular',
+                ],
+                [$user->getId(), $other->getId()]
+            );
+
+            // 📱 Envoyer une push notification
+            $this->pushNotificationService->notifyNewMessage(
+                $other,
+                $user,
+                $message->getContenu(),
+                $conversation->getId()
+            );
         }
         
         $this->em->flush();
@@ -687,8 +757,14 @@ class ChatController extends BaseApiController
         return new JsonResponse([
             'success' => true,
             'message' => [
-                'id' => $message->getId(),
+                'id' => 'msg-' . $message->getId(),
+                'sender' => [
+                    'id' => $user->getId(),
+                    'name' => $user->getPrenom() . ' ' . $user->getNom(),
+                    'avatarImageUrl' => '/img/avatars/thumb-' . ($user->getId() % 15 + 1) . '.jpg',
+                ],
                 'content' => $message->getContenu(),
+                'timestamp' => $message->getDateEnvoi()->getTimestamp(),
                 'createdAt' => $message->getDateEnvoi()?->format('c'),
                 'isMe' => true,
             ],

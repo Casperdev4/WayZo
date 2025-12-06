@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Controller\Api\BaseApiController;
 use App\Entity\Chauffeur;
 use App\Entity\EscrowPayment;
 use App\Entity\Ride;
@@ -9,14 +10,13 @@ use App\Repository\EscrowPaymentRepository;
 use App\Repository\RideRepository;
 use App\Service\EscrowService;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/escrow')]
-class EscrowController extends AbstractController
+class EscrowController extends BaseApiController
 {
     public function __construct(
         private EscrowService $escrowService,
@@ -32,11 +32,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function getEscrowForRide(Ride $ride): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         $escrow = $ride->getEscrowPayment();
         
@@ -71,11 +67,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function holdFunds(Request $request): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         $data = json_decode($request->getContent(), true);
         
@@ -152,11 +144,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function markCompleted(EscrowPayment $escrow): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         try {
             $this->escrowService->markCompleted($escrow, $user);
@@ -178,11 +166,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function confirm(EscrowPayment $escrow): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         try {
             $this->escrowService->confirmByOwner($escrow, $user);
@@ -204,11 +188,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function cancel(EscrowPayment $escrow): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         try {
             if ($escrow->getBuyer() === null) {
@@ -242,11 +222,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function abandon(EscrowPayment $escrow): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         try {
             $this->escrowService->cancelByBuyer($escrow, $user);
@@ -268,11 +244,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function dispute(EscrowPayment $escrow, Request $request): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         $data = json_decode($request->getContent(), true);
         $reason = $data['reason'] ?? '';
@@ -301,11 +273,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function awaitingValidation(): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         $escrows = $this->escrowRepository->findAwaitingValidationBySeller($user);
 
@@ -323,11 +291,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function history(Request $request): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         $type = $request->query->get('type', 'all'); // seller, buyer, all
 
@@ -356,11 +320,7 @@ class EscrowController extends AbstractController
     #[IsGranted('ROLE_CHAUFFEUR')]
     public function cancellationPreview(EscrowPayment $escrow): JsonResponse
     {
-        $user = $this->getUser();
-        
-        if (!$user instanceof Chauffeur) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
-        }
+        $user = $this->getChauffeur();
 
         if ($escrow->getSeller()->getId() !== $user->getId()) {
             return $this->json(['error' => 'Accès non autorisé'], 403);
